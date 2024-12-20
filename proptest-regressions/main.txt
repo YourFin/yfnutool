@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e509c4c48063f3a19325734ce7358b062c3d5f483d0f17ce60ac82cc9de7b27b # shrinks to case = (CmdLine { text: [102, 111, 111, 32, 34, 98, 97, 32], cursor_pos: 7 }, CmdLine { text: [102, 111, 111, 32, 36, 34, 98, 97, 32], cursor_pos: 8 })
+cc 8e16b235a21f981b343110c88371586e011dabb7bf80ab482993761c0f84f3ab # shrinks to (text, cursor_pos) = ([124], 1)
