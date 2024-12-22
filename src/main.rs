@@ -81,15 +81,16 @@ fn dwim_interpolate_cli(mut input: CmdLine) -> Result<CmdLine> {
         })?;
     if log_enabled!(log::Level::Debug) {
         let mut node = innermost_node;
-        // evil do while
-        'l: while {
+        'do_while: while {
+            /* do */
             debug!("node parent chain: {}", node.kind());
             let cont = node.id() != tree.root_node().id();
             let optional_node = node.parent();
             node = match optional_node {
                 Some(wrapped) => wrapped,
-                None => break 'l,
+                None => break 'do_while,
             };
+            /* while */
             cont
         } {}
     }
