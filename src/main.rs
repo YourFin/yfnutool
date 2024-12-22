@@ -115,9 +115,9 @@ fn dwim_interpolate_cli(mut input: CmdLine) -> Result<CmdLine> {
 }
 
 fn main() -> Result<()> {
-    let cl = Cli::parse();
+    let cli = Cli::parse();
     env_logger::Builder::new()
-        .filter_level(cl.verbose.log_level_filter())
+        .filter_level(cli.verbose.log_level_filter())
         .init();
     //info!("starting up");
     //warn!("weewooweewoo");
@@ -127,8 +127,8 @@ fn main() -> Result<()> {
     //let content =
     //    std::fs::read_to_string(path).with_context(|| format!("could not read file `{}`", path))?;
     //println!("file content: {}", content);
-    let result = dwim_interpolate_cli(cmd_line::str_repr(&cl.text))
-        .with_context(|| format!("Error running against {}", cl.text))?;
+    let result = dwim_interpolate_cli(cmd_line::str_repr(&cli.text))
+        .with_context(|| format!("Error running against {}", cli.text))?;
     std::io::stdout().write_all(&cmd_line::to_str_repr(result))?;
     std::io::stdout().write_all(b"\n")?;
     Ok(())
