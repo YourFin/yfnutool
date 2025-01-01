@@ -12,6 +12,7 @@ pretty_assertions = "1.4.1"
 cc="*"
 
 [dependencies]
+annotate-snippets = "0.11.5"
 anyhow = "1.0.94"
 bstr = { version = "1.11.1", features = ["serde", "unicode"] }
 bumpalo = { version = "3.16.0", features = ["collections", "boxed"] }
