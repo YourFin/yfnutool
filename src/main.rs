@@ -1,43 +1,62 @@
 //use std::io::IsTerminal;
 
+mod cmd_line;
+use cmd_line::ToStrRepr;
+mod nu_kind_sym;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, log_enabled};
-mod nu_kind_sym;
 use nu_kind_sym::nu_kind_sym;
 #[cfg(test)]
 use pretty_assertions::{assert_eq, assert_ne};
-use std::cmp::Ordering;
-use std::fmt;
-use std::io::Write;
-//use std::str;
 //use tree_sitter::{InputEdit, Language, Point};
+
+// Dummy wrapper to implement "Orphan" instances
+struct Id<T>(T);
 
 #[derive(Parser, Debug)]
 struct Cli {
     #[command(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
-    text: String,
+    #[arg(long)]
+    test_string: Option<String>,
 }
 
-//#[derive(Debug, PartialEq, Eq)]
-//enum ParseState {
-//    SingleQuote,
-//    DoubleQuote,
-//    RawString,
-//    // Ignoring bare-word strings
-//    Backtick,
-//    SingleQuoteInterpolated,
-//    DoubleQuoteInterpolated,
-//
-//    // "not in the middle of a string"
-//    Other,
-//
-//    DollarSign,
-//    RawStringInR,
-//    RawStringInPound,
-//    RawStringInSingle,
-//}
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    env_logger::Builder::new()
+        .filter_level(cli.verbose.log_level_filter())
+        .init();
+    match cli.test_string {
+        Some(str) => {
+            let cmd_line: cmd_line::Bytes = cmd_line::str_repr(str.clone());
+            let result = dwim_interpolate_cli(cmd_line)
+                .with_context(|| format!("Error running against {:?}", str))?;
+
+            println!("{}", result.to_str_repr());
+        }
+        None => {
+            let (cursor_pos_grapheme, text) = rmp_serde::decode::from_read(std::io::stdin())
+                .with_context(|| "Unable to read from stdin")?;
+            let bytes_cli = dwim_interpolate_cli(
+                cmd_line::Utf8 {
+                    text,
+                    cursor_pos_grapheme,
+                }
+                .into(),
+            )?;
+            let utf8_cli: cmd_line::Utf8 = bytes_cli
+                .try_into()
+                .with_context(|| "dwim_interpolate_cli returned invalid utf8")?;
+            rmp_serde::encode::write(
+                &mut std::io::stdout(),
+                &(utf8_cli.cursor_pos_grapheme, utf8_cli.text),
+            )?;
+        }
+    }
+    Ok(())
+}
 
 // h r#'
 // ^ boring
@@ -46,9 +65,7 @@ struct Cli {
 //    ^ maybe an r#' ?
 //     ^ An r#'!
 
-use cmd_line::CmdLine;
-
-fn dwim_interpolate_cli(mut input: CmdLine) -> Result<CmdLine> {
+fn dwim_interpolate_cli(mut input: cmd_line::Bytes) -> Result<cmd_line::Bytes> {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_nu::LANGUAGE.into())
@@ -72,7 +89,7 @@ fn dwim_interpolate_cli(mut input: CmdLine) -> Result<CmdLine> {
 
     let innermost_node = tree
         .root_node()
-        .descendant_for_byte_range(effective_cursor_pos, effective_cursor_pos)
+        .named_descendant_for_byte_range(effective_cursor_pos, effective_cursor_pos)
         .with_context(|| {
             format!(
                 "Unable to find node at cursor position {}",
@@ -95,43 +112,108 @@ fn dwim_interpolate_cli(mut input: CmdLine) -> Result<CmdLine> {
         } {}
     }
 
-    if innermost_node.kind_id() == nu_kind_sym!("val_string") {
-        match input.text[innermost_node.start_byte()] {
-            b'\'' => {
-                debug!("Single quote string");
-                input.insert_push_cursor(innermost_node.start_byte(), b'$');
-                input.insert_push_cursor(input.cursor_pos, b'(');
-                input.insert_no_push_cursor(input.cursor_pos, b')');
-                return Ok(input);
-            }
-            _ => (),
+    match (
+        innermost_node.kind_id(),
+        input.text[innermost_node.start_byte()],
+    ) {
+        (nu_kind_sym!("val_string") | nu_kind_sym!("ERROR"), b'\'') => {
+            debug!("Single quote string");
+            input = escape::prep_interpolate_single(input, innermost_node.byte_range());
+            input.insert_push_cursor(innermost_node.start_byte(), b'$');
+            input.insert_push_cursor(input.cursor_pos, b'(');
+            input.insert_no_push_cursor(input.cursor_pos, b')');
+            return Ok(input);
         }
+        //(nu_kind_sym!("val_string"), b'\"') => {
+        //    debug!("Double quote string");
+        //    input.insert_push_cursor(innermost_node.start_byte(), b'$');
+        //    input.insert_push_cursor(input.cursor_pos, b'(');
+        //    input.insert_no_push_cursor(input.cursor_pos, b')');
+        //    return Ok(input);
+        //}
+        _ => (),
     }
 
-    Ok(CmdLine {
-        text: vec![],
+    Ok(cmd_line::Bytes {
+        text: vec![].into(),
         cursor_pos: 0,
     })
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    env_logger::Builder::new()
-        .filter_level(cli.verbose.log_level_filter())
-        .init();
-    //info!("starting up");
-    //warn!("weewooweewoo");
-    //let is_terminal = std::io::stdout().is_terminal();
-    //debug!("std::io::stdout().is_terminal: {}", is_terminal);
-    //let path = "test.txt";
-    //let content =
-    //    std::fs::read_to_string(path).with_context(|| format!("could not read file `{}`", path))?;
-    //println!("file content: {}", content);
-    let result = dwim_interpolate_cli(cmd_line::str_repr(&cli.text))
-        .with_context(|| format!("Error running against {}", cli.text))?;
-    std::io::stdout().write_all(&cmd_line::to_str_repr(result))?;
-    std::io::stdout().write_all(b"\n")?;
-    Ok(())
+mod escape {
+    use super::*;
+    use std::ops::Range;
+    fn double_to_double_interpolate(
+        mut cmd_line: cmd_line::Bytes,
+        range: Range<usize>,
+    ) -> cmd_line::Bytes {
+        let mut idx = range.start;
+        while idx < range.end {
+            match cmd_line.text[idx] {
+                b'(' => {
+                    cmd_line.insert_push_cursor(idx, b'\\');
+                    idx += 1;
+                }
+                _ => (),
+            }
+
+            idx += 1;
+        }
+        cmd_line
+    }
+
+    // TODO: think about this more
+    fn single_to_double(mut cmd_line: cmd_line::Bytes, range: Range<usize>) -> cmd_line::Bytes {
+        let mut idx = range.start;
+        while idx < range.end {
+            match cmd_line.text[idx] {
+                b'"' => {
+                    cmd_line.insert_push_cursor(idx, b'\\');
+                    idx += 1;
+                }
+                _ => (),
+            }
+
+            idx += 1;
+        }
+        cmd_line
+    }
+
+    pub fn prep_interpolate_single(
+        mut cmd_line: cmd_line::Bytes,
+        interpolate_range: Range<usize>,
+    ) -> cmd_line::Bytes {
+        let mut idx = interpolate_range.start;
+        while idx < interpolate_range.end {
+            match cmd_line.text[idx] {
+                b'(' => {
+                    const REPLACEMENT: &[u8] = br#"('(')"#;
+                    cmd_line.overwrite_range(idx..idx + 1, REPLACEMENT);
+                    idx += REPLACEMENT.len();
+                }
+                _ => {
+                    idx += 1;
+                }
+            }
+        }
+        cmd_line
+    }
+
+    //fn double_to_single(mut cmd_line: CmdLine, range: Range<usize>) -> CmdLine {
+    //    let mut idx = range.start;
+    //    while idx < range.end {
+    //        match cmd_line.text[idx] {
+    //            b'\\' => {
+    //                cmd_line.delete_no_pull_cursor(idx);
+    //                match cmd_line.text[idx] {
+    //                    b'(' => {
+    //                    }
+    //                }
+    //            }
+    //            _ => (),
+    //        }
+    //    }
+    //}
 }
 
 #[cfg(test)]
@@ -140,163 +222,29 @@ mod tests {
     use cmd_line::str_repr;
     use yare::parameterized;
 
-    #[parameterized(
-        //in_existing_double_quote_string = {str_repr(r#"foo "ba| "#), str_repr(r#"foo $"ba(|)"#)},
-        in_existing_single_quote_string = {str_repr(r#"foo 'ba| '"#), str_repr(r#"foo $'ba(|) '"#)},
-        empty_string = {str_repr("|"), str_repr(r#"$"(|)""#)},
-        //special_case_add_dollarsign = {str_repr(r#"$"(|)""#), str_repr(r#"$"($|)""#)},
-    )]
-    fn should_add_interpolation(before: CmdLine, expected: CmdLine) {
-        pretty_assertions::assert_eq!(dwim_interpolate_cli(before).unwrap(), expected);
+    mod single_quote {
+        use super::*;
+        #[parameterized(
+            //in_existing_double_quote_string = {str_repr(r#"foo "ba| "#), str_repr(r#"foo $"ba(|)"#)},
+            simple = {str_repr(r#"'|'"#), str_repr(r#"$'(|)'"#)},
+            later_in_cli = {str_repr(r#"foo 'ba| '"#), str_repr(r#"foo $'ba(|) '"#)},
+            escape_existing_paren = {str_repr(r#"'(ba| '"#), str_repr(r#"$'('(')ba(|) '"#)},
+            //empty_string = {str_repr("|"), str_repr(r#"$"(|)""#)},
+            //special_case_add_dollarsign = {str_repr(r#"$"(|)""#), str_repr(r#"$"($|)""#)},
+        )]
+        fn should_add_interpolation(before: cmd_line::Bytes, expected: cmd_line::Bytes) {
+            pretty_assertions::assert_eq!(dwim_interpolate_cli(before).unwrap(), expected);
+        }
     }
 
     #[test]
     fn cli_helper() {
         pretty_assertions::assert_eq!(
-            str_repr("h|ello world"),
-            CmdLine {
+            str_repr::<_, cmd_line::Bytes>("h|ello world"),
+            cmd_line::Bytes {
                 text: b"hello world".to_vec(),
                 cursor_pos: 1,
             }
         )
-    }
-}
-
-mod cmd_line {
-    use std::cmp;
-
-    use super::*;
-    #[derive(Clone, PartialEq)]
-    pub struct CmdLine {
-        pub text: Vec<u8>,
-        pub cursor_pos: usize,
-    }
-
-    impl CmdLine {
-        pub fn insert_push_cursor(&mut self, pos: usize, char: u8) {
-            self.insert_wrt_cursor(pos, char, true);
-        }
-        pub fn insert_no_push_cursor(&mut self, pos: usize, char: u8) {
-            self.insert_wrt_cursor(pos, char, false);
-        }
-        fn insert_wrt_cursor(&mut self, pos: usize, char: u8, push_cursor: bool) {
-            if pos == self.text.len() {
-                self.text.push(char)
-            } else {
-                self.text.insert(pos, char);
-            }
-            let less_than_for_cursor = if push_cursor {
-                cmp::PartialOrd::le
-            } else {
-                cmp::PartialOrd::lt
-            };
-            if less_than_for_cursor(&pos, &self.cursor_pos) {
-                self.cursor_pos += 1;
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod impl_tests {
-        use super::*;
-        use yare::parameterized;
-        mod push_cursor {
-            use super::*;
-            #[parameterized(
-                before_cursor = {str_repr(" |  "), 0, b'i', str_repr("i |  ")},
-                at_cursor     = {str_repr(" |  "), 1, b'i', str_repr(" i|  ")},
-                after_cursor  = {str_repr(" |  "), 2, b'i', str_repr(" | i ")},
-                at_end        = {str_repr(" |  "), 3, b'i', str_repr(" |  i")},
-            )]
-            fn should_correctly_adjust_cursor_pos_inserting_character(
-                before: CmdLine,
-                pos: usize,
-                char: u8,
-                expected: CmdLine,
-            ) {
-                let mut actual = before.clone();
-                actual.insert_push_cursor(pos, char);
-                pretty_assertions::assert_eq!(actual, expected);
-            }
-        }
-        mod no_push_cursor {
-            use super::*;
-            #[parameterized(
-                before_cursor = {str_repr(" |  "), 0, b'i', str_repr("i |  ")},
-                at_cursor     = {str_repr(" |  "), 1, b'i', str_repr(" |i  ")},
-                after_cursor  = {str_repr(" |  "), 2, b'i', str_repr(" | i ")},
-                at_end        = {str_repr(" |  "), 3, b'i', str_repr(" |  i")},
-            )]
-            fn should_correctly_adjust_cursor_pos_inserting_character(
-                before: CmdLine,
-                pos: usize,
-                char: u8,
-                expected: CmdLine,
-            ) {
-                let mut actual = before.clone();
-                actual.insert_no_push_cursor(pos, char);
-                pretty_assertions::assert_eq!(actual, expected);
-            }
-        }
-    }
-
-    impl fmt::Debug for CmdLine {
-        fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-            fmt.debug_tuple("CmdLine")
-                .field(&String::from_utf8_lossy(&to_str_repr(self.clone())).as_ref())
-                .finish()
-        }
-    }
-
-    pub fn str_repr<ByteArr: AsRef<[u8]> + std::fmt::Display>(lit: ByteArr) -> CmdLine {
-        let bytes = lit.as_ref();
-        for (idx, char) in bytes.iter().enumerate() {
-            if *char == b'|' {
-                let mut ret = Vec::with_capacity(bytes.len() - 1);
-                ret.extend_from_slice(&bytes[0..idx]);
-                ret.extend_from_slice(&bytes[idx + 1..bytes.len()]);
-                return CmdLine {
-                    text: ret,
-                    cursor_pos: idx,
-                };
-            }
-        }
-        panic!("No '|' in `{}`", &lit);
-    }
-
-    pub fn to_str_repr(cmd_line: CmdLine) -> Vec<u8> {
-        let mut ret = Vec::with_capacity(cmd_line.text.len() + 1);
-        for idx in 0..(cmd_line.text.len() + 1) {
-            ret.push(match idx.cmp(&cmd_line.cursor_pos) {
-                Ordering::Less => cmd_line.text[idx],
-                Ordering::Equal => b'|',
-                Ordering::Greater => cmd_line.text[idx - 1],
-            })
-        }
-        ret
-    }
-
-    #[cfg(test)]
-    mod str_repr_tests {
-        use super::*;
-        use proptest::prelude::*;
-
-        proptest! {
-            #[test]
-            fn roundtrip(
-                (text, cursor_pos) in "[^|]*".prop_flat_map(|str| {
-                    let bytes = str.as_bytes();
-                    (Just(bytes.to_owned()), 0..(bytes.len() + 1))
-                })
-            ) {
-                let original = CmdLine { cursor_pos, text };
-                let round_tripped = str_repr(
-                    unsafe {
-                        String::from_utf8_unchecked(to_str_repr(original.clone()))
-                    }
-                );
-                prop_assert_eq!(original, round_tripped);
-            }
-        }
     }
 }
