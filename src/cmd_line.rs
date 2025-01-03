@@ -373,7 +373,7 @@ mod tests {
             fn roundtrip_bytes(
                 (text, cursor_pos) in "[^|]*".prop_flat_map(|str| {
                     let bytes = str.as_bytes();
-                    (Just(bytes.to_owned()), 0..(bytes.len() + 1))
+                    (Just(bytes.to_owned().into()), 0..(bytes.len() + 1))
                 })
             ) {
                 let original = Bytes { cursor_pos, text };

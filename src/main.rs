@@ -244,7 +244,7 @@ mod tests {
         pretty_assertions::assert_eq!(
             str_repr::<_, cmd_line::Bytes>("h|ello world"),
             cmd_line::Bytes {
-                text: b"hello world".to_vec(),
+                text: b"hello world".to_vec().into(),
                 cursor_pos: 1,
             }
         )
