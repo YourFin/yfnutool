@@ -1,19 +1,19 @@
 use std::fmt::Display;
 
-pub fn pretty_print_tree<'tree, 'src>(
+pub fn pretty_print_tree<'src, 'tree>(
     src: &'src str,
     tree: &'tree tree_sitter::Tree,
-) -> impl std::fmt::Display + use<'tree, 'src> {
+) -> TreePrinter<'src, 'tree> {
     TreePrinter {
         src,
         tree,
         show_node_details: false,
     }
 }
-pub fn pretty_print_tree_details<'tree, 'src>(
+pub fn pretty_print_tree_details<'src, 'tree>(
     src: &'src str,
     tree: &'tree tree_sitter::Tree,
-) -> impl std::fmt::Display + use<'tree, 'src> {
+) -> TreePrinter<'src, 'tree> {
     TreePrinter {
         src,
         tree,
@@ -21,7 +21,7 @@ pub fn pretty_print_tree_details<'tree, 'src>(
     }
 }
 
-struct TreePrinter<'src, 'tree> {
+pub struct TreePrinter<'src, 'tree> {
     src: &'src str,
     tree: &'tree tree_sitter::Tree,
     show_node_details: bool,
