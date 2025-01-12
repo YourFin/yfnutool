@@ -5,15 +5,14 @@ use std::ops::Range;
 
 use cmd_line::ToStrRepr;
 mod debug;
-mod nu_kind_sym;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, log_enabled, trace};
-use nu_kind_sym::nu_kind_sym;
 #[cfg(test)]
 use pretty_assertions::{assert_eq, assert_ne};
 use tree_sitter::Node;
+use yfnutool_macros::nu_kind_sym;
 //use tree_sitter::{InputEdit, Language, Point};
 
 // Dummy wrapper to implement "Orphan" instances

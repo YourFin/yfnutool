@@ -18,7 +18,6 @@ bstr = { version = "1.11.1", features = ["serde", "unicode"] }
 bumpalo = { version = "3.16.0", features = ["collections", "boxed"] }
 clap = "4.5.23"
 clap-verbosity-flag = "3.0.2"
-comptime = "1.0.0"
 crop = "0.4.2"
 either = "1.13.0"
 env_logger = "0.11.5"
@@ -28,3 +27,4 @@ rmp-serde = "1.3.0"
 tree-sitter = "0.24.5"
 tree-sitter-nu = { path = "tree-sitter-nu" }
 unicode-segmentation = "1.12.0"
+yfnutool-macros = { path = "yfnutool-macros" }
