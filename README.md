@@ -25,14 +25,15 @@ TODO
 
 ## Using
 
-You'll need to set up the keybinding yourself. For the recommended configuration (Ctrl-i -> yfnutool interpolate), you'll want to add:
+You'll need to set up the keybinding yourself. For the recommended configuration (Ctrl-s -> yfnutool interpolate), you'll want to add:
 
 ``` nushell
+use yfnutool *
 $env.config.keybindings ++= [
   { name: yfnutool_interpolate
   , modifier: CONTROL
-  , keycode: Char_i
-  , mode: Vi_Insert # Alternatively, "Emacs"
+  , keycode: Char_s
+  , mode: vi_insert # Alternatively, "emacs"
   , event: 
     { send: executehostcommand
     , cmd: 'yfnutool interpolate' 
@@ -41,7 +42,7 @@ $env.config.keybindings ++= [
 ]
 ```
 
-to your `config.nu`
+to your `config.nu`.
 
 # Developing
 ## Testing the nix build
