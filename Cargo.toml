@@ -28,3 +28,7 @@ tree-sitter = "0.24.5"
 tree-sitter-nu = { path = "tree-sitter-nu" }
 unicode-segmentation = "1.12.0"
 yfnutool-macros = { path = "yfnutool-macros" }
+
+[[bin]]
+name = "_yfnutool-bin"
+path = "src/main.rs"
