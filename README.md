@@ -18,11 +18,9 @@ git clone --recurse-submodules https://github.com/YourFin/yfnutool.git
 cd yfnutool
 cargo install --path .
 # Make sure that the cargo install dir is in $env.PATH
-yfnutool --help
-# Add yfnutool.nix to the vendor directory
-$"\n\$env.NU_LIB_DIRS += (pwd)/nu-mod/yfnutool" | save --append ~/.config/nushell/env.nu
-# Load the yfnutool module in your config
-"\nuse yfnutool *\n" | save --append ~/.config/nushell/env.nu
+_yfnutool-bin --help
+# Add yfnutool to your loadable modules
+$"\n\$env.NU_LIB_DIRS += (pwd)/nu-mod/yfnutool\n" | save --append ~/.config/nushell/env.nu
 ```
 
 ## Nix
@@ -31,7 +29,7 @@ TODO
 
 ## Usage
 
-You'll need to set up the keybinding yourself. For the recommended configuration (Ctrl-s -> yfnutool interpolate), you'll want to add:
+You'll need to set up the keybinding yourself. For the recommended configuration (Ctrl-s -> `yfnutool interpolate`), you'll want to add:
 
 ``` nushell
 use yfnutool *
@@ -59,17 +57,14 @@ nix-build --expr 'with import <nixpkgs> {}; callPackage (import ./.) {}'
 
 ## Testing
 
-Most of the testing infrastructure is built around a string encoding of the command line. This representation encodes the cursor position with a `|` character in the string. You can try this by passing such a string to the `yfnutool` binary with the `--test-string` argument:
+Most of the testing infrastructure uses a string representation encoding the cursor, with the cursor position represented by the first `|` character in the string. You can try this by passing such a string to with the `--test-string` argument:
 
 ``` text
-$ yfnutool --test-string "hello 'worl|d'"
-hello $'worl(|)d'
-# Alternatively
 $ cargo run -- --test-string "hello 'worl|d'"
 hello $'worl(|)d'
 ```
 
-At higher log levels, the binary will dump the parsed syntax tree, which can be useful for understanding how to 
+To help with writing tree-matching code, at higher log levels the binary will dump the parsed syntax tree: 
 
 ``` text
 $[2025-01-12T00:59:12Z TRACE yfnutool] info: Tree sitter parse results:
@@ -121,10 +116,12 @@ hello $'worl(|)d' yfnutool -vvv --test-string "hello 'worl|d'"
 
 ## Wiring
 
-The `yfnutool` binary expects a [MsgPack](https://msgpack.org/) two-element array via stdin:
+The `_yfnutool-bin` binary expects a [MsgPack](https://msgpack.org/) two-element array via stdin:
 
 ``` text
 [ cursor position (in unicode graphemes from start), command line text (utf-8) ]
 ```
 
-and returns the same structure. The "unicode graphemes from start" is what [`commandline get-cursor`](https://www.nushell.sh/commands/docs/commandline_get-cursor.html) returns.
+and returns the same structure via stdout. The "unicode graphemes from start" is what [`commandline get-cursor`](https://www.nushell.sh/commands/docs/commandline_get-cursor.html) returns.
+
+The nu module in [./nu-mod](./nu-mod) wires this into [`commandline`](https://www.nushell.sh/commands/docs/commandline.html).
