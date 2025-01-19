@@ -25,7 +25,7 @@ $"\n\$env.NU_LIB_DIRS += (pwd)/nu-mod/yfnutool\n" | save --append ~/.config/nush
 
 ## Nix
 
-TODO
+Here's the commit where I installed this in my own dotfiles: https://github.com/YourFin/dotfiles/commit/13cf732c5f3f1a0c9273cbc712e0eda1b19a8483
 
 ## Usage
 
