@@ -2,6 +2,12 @@
 
 Tree-sitter based nushell fiddling. Right now just implements a half-finished (but usable) "do string interpolation at point" command.
 
+# Features
+
+## DWIM Interpolate (ctrl-s)
+
+<video src="https://github.com/user-attachments/assets/cc389005-f0d2-4112-8910-5778c28b33bd"></video>
+
 # Installing
 
 ## Source build
@@ -23,7 +29,7 @@ $"\n\$env.NU_LIB_DIRS += (pwd)/nu-mod/yfnutool" | save --append ~/.config/nushel
 
 TODO
 
-## Using
+## Usage
 
 You'll need to set up the keybinding yourself. For the recommended configuration (Ctrl-s -> yfnutool interpolate), you'll want to add:
 
@@ -122,4 +128,3 @@ The `yfnutool` binary expects a [MsgPack](https://msgpack.org/) two-element arra
 ```
 
 and returns the same structure. The "unicode graphemes from start" is what [`commandline get-cursor`](https://www.nushell.sh/commands/docs/commandline_get-cursor.html) returns.
-
