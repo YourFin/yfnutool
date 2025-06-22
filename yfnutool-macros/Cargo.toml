@@ -10,5 +10,5 @@ proc-macro = true
 
 [dependencies]
 syn = "2.0.96"
-tree-sitter = "0.24.5"
+tree-sitter = "0.25.6"
 tree-sitter-nu = { path = "../tree-sitter-nu" }
